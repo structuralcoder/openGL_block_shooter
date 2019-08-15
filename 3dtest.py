@@ -856,7 +856,7 @@ class Window(pyglet.window.Window):
 		self.saveButton=pyglet.text.Label('SAVE', font_name='Arial', font_size=18,
 			x=self.width*.75, y=self.height-10, anchor_x='left', anchor_y='top',
 			color=(0, 0, 0, 255))
-		self.edit_mode=1
+		self.edit_mode=0
 		self.bang='x'
 		self.barrel={}
 		self.auto_recoil=60
