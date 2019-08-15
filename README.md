@@ -1,21 +1,30 @@
 # openGL_block_shooter
-learning openGL and networking in the local area network for multiplayer connections to a server
+###learning openGL and networking in the local area network for multiplayer connections to a server
 
-     YOU'LL NEED PYTHON, PYGAME AND PYGLET TO RUN THIS CODE:
+---
+
+###YOU'LL NEED PYTHON, PYGAME AND PYGLET TO RUN THIS CODE:
       GO TO THE "INSTALL-PYTHON/LIBS" FILE ON THIS REPOSITORY IF YOU DONT KNOW HOW
 
-THERE ARE 9 FILES AND 1 FOLDER YOU'LL NEED TO PUT INTO THE SAME DIR:
-        sounds  (folder)
-        3dtest.py
-        game.py
-        guns.py
-        localServe.py
-        network.py
-        server.py
-        startupclient.py
-        testlevel.txt
-        texture.png
- 
+---
+
+##THERE ARE 9 FILES AND 1 FOLDER YOU'LL NEED TO PUT INTO THE SAME DIR:
+```
+* sounds  (folder)
+* 3dtest.py
+* game.py
+* guns.py
+* localServe.py
+* network.py
+* server.py
+* startupclient.py
+* testlevel.txt
+* texture.png
+```
+#WHAT THESE FILES DO
+
+===
+
 THE TEXTURE IMAGE IS FOR THE GEOMETRY SURFACES AND THE TESTLEVEL.TXT IS READ UPON THE GAME'S INITIATION.  A LIST OF BLOCK POSITIONS 
 IN THE WORLD IS GIVEN AND DRAWN AS BRICKS TO CREATE THE TEST LEVEL.  
 
@@ -42,6 +51,8 @@ THANKS BE TO FOGLEMAN!!
 
 3DTEST.PY WILL CREATE A "NET" OBJECT THROUGH THE NETWORK.PY FILE TO ESTABLISH A LINK TO THE SERVER
 
+#WHAT YOU GET
+
 AS OF 8-15-2019:
   4 PLAYERS ARE ABLE TO CONNECT AND HAVE A PISTOL BATTLE, ALL PLAYERS STILL FLY AND CAN PLACE BLOCKS/SAVE LOCALY.  
   WHEN ONE PLAYER REACHES <1 HP THEIR IMAGE NO LONGER APPEARS ON OTHER PLAYER'S SCREENS, THE "DEAD" PLAYER'S GHOST IS STILL THERE
@@ -49,7 +60,8 @@ AS OF 8-15-2019:
   
   IF AN IMMIDIATE CONNECTION CAN BE MADE, THEN THE PLAYER IS INSTANTLY TAKEN THERE. THE PLAYER HAS NO OPTIONS TO SEARCH OR START
   A NEW SERVER IF ONE ALREADY EXISTS.
-          
+  
+  #BUGS
           LATEST FIXES (8-15-19): 
             1.SERVERS AND CLIENTS NO LONGER LOCK UP UPON PLAYER EXITS
             2.4 PLAYERS CAN NOW JOIN
