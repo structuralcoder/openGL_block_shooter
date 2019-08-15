@@ -5,8 +5,12 @@ import math
 import random
 import time
 import threading
-import guns, pygame
+import guns
+import pygame
+import localServe
 
+
+from startupclient import *
 from collections import deque
 from pyglet import image
 from pyglet.gl import *
@@ -184,6 +188,7 @@ class peopleCube:
 	def __init__(self,player):
 #		#SETUP PLAYER ATTRIBUTES:
 		self.num=player.num
+		self.connected=True
 #		self.pos=player.position
 #		self.pos_under=(player.position[0],player.position[1]-1,player.position[2])
 #		self.rotation=player.rotation
@@ -436,6 +441,7 @@ class Model(object):
 
 	def add_player(self,player, immediate=True):
 		self.players.append(peopleCube(player))
+		print((self.players))
 		"""bang_batch"""
 		vertex_data=cube_vertices(0, 0, 0, 0.15)
 		texture_data = list(BANG)
@@ -446,14 +452,15 @@ class Model(object):
 		position=player.position
 		texture=player.head_img
 		if position in self.people:
-			self.remove_player(position, immediate)
-		self.people[position] = texture
+			self.remove_player(player)
+		self.people[player.num] = texture
 		self.sectors.setdefault(sectorize(position), []).append(position)
 		#print(immediate)
 		if immediate:
 			if self.exposed(position):
 				self.show_people(player,position)
 			self.check_neighbors(position)
+		
 	
 	def add_bullet(self,bullet, immediate=True):
 		position=bullet.position
@@ -483,20 +490,26 @@ class Model(object):
 			Whether or not to immediately remove block from canvas.
 		"""
 		del self.world[position]
+		#print('deleted block from the world:',list(position))
 		self.sectors[sectorize(position)].remove(position)
 		if immediate:
 			if position in self.shown:
 				self.hide_block(position)
 			self.check_neighbors(position)
 	
-	def remove_player(self, position, immediate=True):
-		del self.people[position]
+	def remove_player(self, player, immediate=True):
+		try:del self.people[player.num]
+		except:pass
+		player.connected=False
 		#print(str(position)+' deleted')
-		self.sectors[sectorize(position)].remove(position)
-		if immediate:
-			if position in self.shown:
-				self.hide_block(position)
-			self.check_neighbors(position)
+		for pl in game.players:
+			if pl.num==player.num:
+				position=pl.position
+				self.sectors[sectorize(position)].remove(position)
+				if immediate:
+					if position in self._shown:
+						del self._shown[position]
+				break
 
 	def remove_bullet(self, position):
 		del self.projectiles[position]
@@ -546,9 +559,9 @@ class Model(object):
 
 	def show_people(self,player, position, immediate=True):
 		if position in self.people:
-			texture = self.people[position]
+			texture = self.people[player.num]
 		
-		self.shown[position] = texture
+		#self.shown[position] = texture
 		#print(self.shown[position])
 		if immediate:
 			self._show_people(player)
@@ -843,7 +856,7 @@ class Window(pyglet.window.Window):
 		self.saveButton=pyglet.text.Label('SAVE', font_name='Arial', font_size=18,
 			x=self.width*.75, y=self.height-10, anchor_x='left', anchor_y='top',
 			color=(0, 0, 0, 255))
-		self.edit_mode=0
+		self.edit_mode=1
 		self.bang='x'
 		self.barrel={}
 		self.auto_recoil=60
@@ -992,8 +1005,19 @@ class Window(pyglet.window.Window):
 			game = net.send(pass_string)
 		except:
 			print('couldnt update local_player info')
-			print(len(self.model.players))
+			print('LENGTH OF self.model.players: ',len(self.model.players))
 		
+		
+		if len(game.players)<len(self.model.players):
+			players_lost=[]
+			for pl in self.model.players:
+				players_lost.append(pl)
+				for g in game.players:
+					if g.num==pl.num:
+						players_lost.remove(pl)
+			for pl in players_lost:
+				self.model.remove_player(pl)
+					
 		
 		
 		self.bang='x'
@@ -1162,11 +1186,21 @@ class Window(pyglet.window.Window):
 					self.model.add_block(previous, self.block)
 					previous=(previous[0],previous[1]+1,previous[2])
 					self.model.add_block(previous, self.block)
-			elif button == pyglet.window.mouse.LEFT and self.bang=='x' and self.hp>0:
-				x,y,z=self.position
-				tup=(x,y,z)
-				dx, dy, dz=vector
-				self.bang=str(tup)+':'+str((dx, dy, dz))+':'+str(self.local_player)+':'+str(self.model.players[self.local_player].damage)
+			elif button == pyglet.window.mouse.LEFT:
+				#if playing a game
+				if self.bang=='x' and self.hp>0 and self.edit_mode==0:
+					x,y,z=self.position
+					tup=(x,y,z)
+					dx, dy, dz=vector
+					self.bang=str(tup)+':'+str((dx, dy, dz))+':'+str(self.local_player)+':'+str(self.model.players[self.local_player].damage)
+				
+				#else if edit_mode is on
+				elif self.edit_mode==1:
+					vector = self.get_sight_vector()
+					block = self.model.hit_test(self.position, vector)[0]
+					if block:
+						x,y,z=block
+						self.model.remove_block((x,y,z))
 		else:
 			if x>=self.width*.75 and x<=(self.width*.75)+70:
 				if y>self.height-40:
@@ -1591,34 +1625,67 @@ def setup():
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
 	setup_fog()
-		
 
-def main(GAME_START):
-	window = Window(width=800, height=600, caption='3dtest', resizable=True)
+def startup_a_server():
+	"""
+	IF THE PLAYER OPTS TO CREATE THEIR OWN SERVER @ THE LOCAL MACHINE
+	ALL THEY HAVE TO DO IS SPECIFY THE PORT, OR IT WILL BE SET TO 5555
 	
+	localServe.create_a_server( specify a port )
+	"""
+	localServe.create_a_server()
+
+retry_to_connect=False
+def main(GAME_START,resetNetwork=['0',0]):
+	global retry_to_connect
+	global game
+	user_network_reset_check=''
 	if GAME_START==True:
+		print('joined game #',game.id)
+		window = Window(width=800, height=600, caption='3dtest', resizable=True)
 		# Hide the mouse cursor and prevent the mouse from leaving the window.
 		window.set_exclusive_mouse(True)
 		setup()
 		pyglet.app.run()
-
-net = Network("1.0.0.300",5555)
-net = Network()
-
-run=True
-if run:
-	"""check to make sure the saved ip and port find an active server on the local network"""
-	GAME_START=True
-	connected=net.getP()
-	if connected==None:
-		print("COULDN'T GET P (net.getP()) :: NO NETWORK ESTABLISHED")
-		GAME_START=False
-		"""
-		self.ip=pyglet.text.Label('SAVE', font_name='Arial', font_size=18,
-			x=self.width*.75, y=self.height-10, anchor_x='left', anchor_y='top',
-			color=(0, 0, 0, 255))
-		"""
-	else:
-		game=net.send("get")
-	main(GAME_START)
 	
+	else:
+		user_network_reset_check=startupClient(running,ip_variable,port_variable,resetNetwork,retry_to_connect)
+	if type(user_network_reset_check)==list:
+		#print(user_network_reset_check)
+		retry_to_connect=True
+		check_network(running,user_network_reset_check[0],user_network_reset_check[1])
+	elif user_network_reset_check=='serve':
+		startup_a_server()
+
+		
+ip_variable="10.0.0.59"
+port_variable=5555
+
+running=True
+
+net= ''
+game = ''
+
+def check_network(running,ip_variable,port_variable):
+	global net
+	global game
+	net = Network(ip_variable,port_variable)
+	resetNetwork=[ip_variable,port_variable]
+	if running:
+		"""check to make sure the saved ip and port find an active server on the local network"""
+		GAME_START=True
+		connected=net.p
+		if connected==None:
+			print("COULDN'T GET P (net.p()) :: NO NETWORK ESTABLISHED \n NO PLAYER NUMBER GIVEN")
+			GAME_START=False
+		else:
+			#print('connected to server :: given number:',int(connected)-1)
+			try:
+				game=net.send('get')
+				
+			except:
+				print("couln't get <game>")
+				GAME_START=False
+		main(GAME_START,resetNetwork)
+
+check_network(running,ip_variable,port_variable)
