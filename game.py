@@ -24,7 +24,9 @@ STONE = tex_coords((2, 1), (2, 1), (2, 1))
 startArray=[
 #0
 [(0,0,0),(0,0)],
-[(0,0,-40),(180,0)]
+[(0,0,-40),(180,0)],
+[(17,3,-13),(-90,0)],
+[(-21,3,-12),(0,0)]
 ]
 class Player:
 	def __init__(self,num):
@@ -117,6 +119,7 @@ class Game:
 		self.players.append(Player(num))
 		print('player added:')
 		print(len(self.players),'players on server')
+		self.player_count+=1
 		
 
 	#def get_player_move(self, p):
