@@ -1,55 +1,101 @@
-import pygame
+import socket
+from _thread import *
+import pickle
+from game import Game
 
-def custom_vertices(x,y,z,w=.2,h=.5,d=.05):
-	return [
-		x-w,y+h,z-d, x-w,y+h,z+d, x+w,y+h,z+d, x+w,y+h,z-d,  # top
-		x-w,y-h,z-d, x+w,y-h,z-d, x+w,y-h,z+d, x-w,y-h,z+d,  # bottom
-		x-w,y-h,z-d, x-w,y-h,z+d, x-w,y+h,z+d, x-w,y+h,z-d,  # left
-		x+w,y-h,z+d, x+w,y-h,z-d, x+w,y+h,z-d, x+w,y+h,z+d,  # right
-		x-w,y-h,z+d, x+w,y-h,z+d, x+w,y+h,z+d, x-w,y+h,z+d,  # front
-		x+w,y-h,z-d, x-w,y-h,z-d, x-w,y+h,z-d, x+w,y+h,z-d,  # back
-	]
+local_ip=socket.gethostbyname(socket.gethostname())
+server = local_ip
+port = 5555
 
-def tex_coord(x, y, n=4):
-	""" Return the bounding vertices of the texture square.
-	"""
-	m = 1.0 / n
-	dx = x * m
-	dy = y * m
-	return dx, dy, dx + m, dy, dx + m, dy + m, dx, dy + m
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+try:
+	s.bind((server, port))
+except socket.error as e:
+	str(e)
 
-def tex_coords(top, bottom, side):
-	""" Return a list of the texture squares for the top, bottom and side.
-	"""
-	top = tex_coord(*top)
-	bottom = tex_coord(*bottom)
-	side = tex_coord(*side)
-	result = []
-	result.extend(top)
-	result.extend(bottom)
-	result.extend(side * 4)
-	return result
+s.listen(4)
+print("Waiting for a connection, Server Started")
 
-BLACK = tex_coords((3,1), (3,1), (3,1))
-SILVER = tex_coords((1,2),(1,2),(1,2))
-WOOD_PLANKS = tex_coords((3,0), (3,0), (3,0))
-VADER_FACE = tex_coords((0,2), (0,2), (0,2))
-BULLET=tex_coords((3,1), (3,1), (3,1))
+connected = set()
+games = {}
+idCount = 0
 
 
-
-class pistol:
-	def __init__(self):
-		self.auto=False
-		self.damage=30
-		#color then vertices
-		self.blocks=[SILVER,custom_vertices(0,0.13,-.30,.05,.05,.18),
-			SILVER,custom_vertices(0,0.05,-.15,.04,.1,.02)
-		]
-		self.sound=pygame.mixer.Sound('sounds/380_gunshot.wav')
+def threaded_client(conn, p, gameId):
+	global idCount
+	global running
+	conn.send(str.encode(str(p)))
 	
-		
-		
-		
-		
+	reply = ""
+	while True:
+		try:
+			data = conn.recv(4096).decode()
+			#print(data)
+			if gameId in games:
+				game = games[gameId]
+			#
+				if not data:
+					break
+				else:
+					conn.sendall(pickle.dumps(game))
+					if data == "reset":
+						game.resetWent()
+					elif data != "get":
+						game.update(p, data)
+					for bullet in game.bullets:
+						x,y,z=bullet.position
+						dx,dy,dz=bullet.vector
+						dx=dx/2
+						dy=dy/2
+						dz=dz/2
+						bullet.position=(x+dx,y+dy,z+dz)
+						
+						x,y,z=bullet.position
+						if y<=-2 or y>10 or abs(x)>100 or abs(z)>100:
+							game.bullets.remove(bullet)
+							#print('bullet removed')
+					
+				
+				
+		except:
+			print('server.py didnt get data')
+			break
+	try:
+		for player_num in game.players:
+			if game.players[player_num].num==p:
+				del game.players[player_num]
+	except:pass
+	running=False
+	print("Lost connection")
+	if game.player_count==0:
+		try:
+			del games[gameId]
+			print("Closing Game", gameId)
+			running=False
+		except:
+			pass
+	idCount -= 1
+	conn.close()
+	if idCount<1:
+		running=False
+
+running=True
+gameId=0
+p = 0
+
+while running:
+	conn, addr = s.accept()
+	print("Connected to:", addr)
+
+	idCount += 1
+	#gameId = (idCount - 1)//2
+	print('current gameId set to:',gameId)
+	if idCount == 1:
+		games[gameId] = Game(gameId)
+		print("Creating a new game...")
+	else:
+		p+=1
+		games[gameId].add_player(p)
+
+	start_new_thread(threaded_client, (conn, p, gameId))
