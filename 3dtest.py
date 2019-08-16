@@ -247,6 +247,8 @@ class peopleCube:
 		self.out=0
 		self.auto=weapons[self.equip[self.out]].auto
 		self.damage=weapons[self.equip[self.out]].damage
+		self.gun_distance=weapons[self.equip[self.out]].distance
+		print(self.gun_distance)
 		self.bang_batch=pyglet.graphics.Batch()
 		self.gun_sound=weapons[self.equip[self.out]].sound
 	
@@ -285,6 +287,9 @@ class Model(object):
 		# _show_block() and _hide_block() calls
 		self.queue = deque()
 
+		self.local_player=0
+		self.iterable=0
+		
 		self._initialize()
 		
 		
@@ -396,17 +401,46 @@ class Model(object):
 		max_distance : int
 			How many blocks away to search for a hit.
 		"""
+		variable1=None
+		variable2=None
 		m = 8
 		x, y, z = position
 		dx, dy, dz = vector
 		previous = None
+		people_poses={}
+		for num in game.players:
+			if num!=self.local_player:
+				peep=game.players[num]
+				people_poses[num]=peep.position
+		try:max_distance=int(self.players[self.local_player].gun_distance)
+		except:
+			print('max_distance wont convert @ hit_test')
+			print('gun_distance found:',self.players[self.local_player].gun_distance)
 		for _ in xrange(max_distance * m):
 			key = normalize((x, y, z))
-			if key != previous and key in self.world:
+			if key!=previous:
+				#check if player is able to be hit with your bullet
+				for n in people_poses:
+					pos=people_poses[n]
+					px,py,pz=pos
+					if y>(py-1.5) and y<(py+.4):
+						#print('y in range for player',n)
+						if x>(px-.44) and x<(px+.44):
+							#print('x in range for player',n)
+							if z>(pz-.44) and z<(pz+.44):
+								#print('z hit player',n)
+								if self.iterable>=100:
+									self.iterable=0
+								#print('player',n,'hit',self.iterable)
+								self.iterable+=1
+								variable1=n
+								variable2=None
+								
+			if key != previous and key in self.world and variable1==None:
 				return key, previous
 			previous = key
 			x, y, z = x + dx / m, y + dy / m, z + dz / m
-		return None, None
+		return variable1, variable2
 
 	def exposed(self, position):
 		""" Returns False is given `position` is surrounded on all 6 sides by
@@ -441,7 +475,7 @@ class Model(object):
 
 	def add_player(self,player, immediate=True):
 		self.players.append(peopleCube(player))
-		print((self.players))
+		#print((self.players))
 		"""bang_batch"""
 		vertex_data=cube_vertices(0, 0, 0, 0.15)
 		texture_data = list(BANG)
@@ -502,7 +536,8 @@ class Model(object):
 		except:pass
 		player.connected=False
 		#print(str(position)+' deleted')
-		for pl in game.players:
+		for num in game.players:
+			pl=game.players[num]
 			if pl.num==player.num:
 				position=pl.position
 				self.sectors[sectorize(position)].remove(position)
@@ -856,12 +891,24 @@ class Window(pyglet.window.Window):
 		self.saveButton=pyglet.text.Label('SAVE', font_name='Arial', font_size=18,
 			x=self.width*.75, y=self.height-10, anchor_x='left', anchor_y='top',
 			color=(0, 0, 0, 255))
+		
+		self.healthbar=(15,self.height-30,self.width-30,15,0,255,0)
+		self.healthbar_container=(10,self.height-35,self.width-20,25,0,0,0)
+		self.score = pyglet.text.Label('', font_name='Arial', font_size=18,
+							x=self.width*.80, y=self.height - 40, anchor_x='left', anchor_y='top',
+							color=(0, 0, 0, 255))
+		#						height		width   color   drop
+		#						0			1		2		3
+		self.blood_overlay=(self.height,self.width,(255,0,0,.30),0)
+			
 		self.edit_mode=0
 		self.bang='x'
 		self.barrel={}
 		self.auto_recoil=60
 		self.no_more_bullet='x'
 		self.hp=100
+		self.respawn=0
+		self.born=0
 		
 		self.bang_pos={
 			'pistol':(0,.15,-.5)
@@ -871,11 +918,11 @@ class Window(pyglet.window.Window):
 		
 		game = net.send('get')
 		num=len(game.players)-1
-		self.local_player=num
+		self.model.local_player=self.local_player=num
 		print('local_player is player #',num)
 		self.position=game.players[self.local_player].position
 		self.rotation=game.players[self.local_player].rotation
-		
+		#self.get_back_in_the_game()
 		
 		
 		
@@ -943,7 +990,7 @@ class Window(pyglet.window.Window):
 			dx = 0.0
 			dz = 0.0
 		return (dx, dy, dz)
-
+	
 	def update(self, dt):
 		global game
 		""" This method is scheduled to be called repeatedly by the pyglet
@@ -999,10 +1046,11 @@ class Window(pyglet.window.Window):
 			pass_string=pass_string+'/'+str(self.model.players[self.local_player].r_leg_offset)     #29
 			pass_string=pass_string+'/'+str(self.model.players[self.local_player].r_stepAngle)      #30
 			pass_string=pass_string+'/'+str(self.bang)												#31
-			pass_string=pass_string+'/'+str(self.no_more_bullet)				
-			pass_string=pass_string+'/'+str(self.hp)				
+			pass_string=pass_string+'/'+str(self.no_more_bullet)									#32	
+			pass_string=pass_string+'/'+str(self.born)												#33
 			
 			game = net.send(pass_string)
+			self.hp=game.players[self.local_player].hp
 		except:
 			print('couldnt update local_player info')
 			print('LENGTH OF self.model.players: ',len(self.model.players))
@@ -1012,7 +1060,8 @@ class Window(pyglet.window.Window):
 			players_lost=[]
 			for pl in self.model.players:
 				players_lost.append(pl)
-				for g in game.players:
+				for n in game.players:
+					g=game.players[n]
 					if g.num==pl.num:
 						players_lost.remove(pl)
 			for pl in players_lost:
@@ -1122,40 +1171,71 @@ class Window(pyglet.window.Window):
 					break
 		return tuple(p)
 	
-	def player_hit(self,bullet):
-		self.hp-=int(bullet.damage)
-		print('your current health is:',self.hp)
-		#game=net.send('hp:'+str(self.hp))
 	
-	def bullet_hit(self, bullet_pos,height):
-		for block in self.model.world:
-			x,y,z=block
-			bx,by,bz=bullet_pos
-			#print(block,'||',bx,by,bz)
-			
-			if (y+0.65)>by and (y-0.65)<by:
-				#print('inside y')
-				if (x+0.65)>bx and (x-0.65)<bx:
-					#print('inside x')
-					if (z+0.65)>bz and (z-0.65)<bz:
-						#print('inside z')
-						return True
-						break
-		
-		if int(self.model.bullets[bullet_pos].owner)!=self.local_player:
-			#print(self.model.bullets[bullet_pos].owner)
-			x,y,z=self.position
-			bx,by,bz=bullet_pos
-			if (y+0.5)>by and (y-1.5)<by:
-				#print('y::',(y+0.5),'>',by,'||',(y-1.5),'<',by)
-				if (x+0.5)>bx and (x-0.5)<bx:
-					#print('x::',(x+0.5),'>',bx,'||',(x-0.5),'<',bx)
-					#print('z::',(z+0.5),'>',bz,'||',(z-0.5),'<',bz)
-					if (z+0.5)>bz and (z-0.5)<bz:
-						#print('z::',(z+0.5),'>',bz,'||',(z-0.5),'<',bz)
-						self.player_hit(self.model.bullets[bullet_pos])
-						return True
-					
+	#def bullet_hit(self, position, max_distance=8):
+	#	"""THIS IS TO REPLACE THE OLD DRAW AND CHECK BULLET OPERATION
+	#		I BELIEVE DRAWING EVERY BULLET AND HAVING THE SERVER WORK OUT THE 
+	#		NEXT LOCATION OF EACH BULLET IS PRODUCING LAG
+	#	"""
+	#	#print('bullet_hit test')
+	#	m = 8
+	#	x, y, z = position
+	#	dx, dy, dz = self.get_sight_vector()
+	#	dx=dx/4
+	#	dy=dy/4
+	#	dz=dz/4
+	#	previous = None
+	#	people_poses={}
+	#	for num in game.players:
+	#		if num!=self.local_player:
+	#			peep=game.players[num]
+	#			px,py,pz=peep.position
+	#			pkey=normalize((px,py,pz))
+	#			ux,uy,uz=pkey
+	#			uy-=1
+	#			under=ux,uy,uz
+	#			people_poses[pkey]=peep.num
+	#			people_poses[under]=peep.num
+	#	for _ in xrange(max_distance * m):
+	#		key = normalize((x, y, z))
+	#		if key != previous and key in self.model.world:
+	#			print('bullet bottomed out')
+	#			return 'world'
+	#		
+	#		previous = key
+	#		x, y, z = x + dx / m, y + dy / m, z + dz / m
+	#	return None, None
+	#	#hit_test(self, position, vector, max_distance=8)
+	#	#hit_test()
+	#	pass
+		#for block in self.model.world:
+		#	x,y,z=block
+		#	bx,by,bz=bullet_pos
+		#	#print(block,'||',bx,by,bz)
+		#	
+		#	if (y+0.65)>by and (y-0.65)<by:
+		#		#print('inside y')
+		#		if (x+0.65)>bx and (x-0.65)<bx:
+		#			#print('inside x')
+		#			if (z+0.65)>bz and (z-0.65)<bz:
+		#				#print('inside z')
+		#				return True
+		#				break
+		#
+		#if int(self.model.bullets[bullet_pos].owner)!=self.local_player:
+		#	#print(self.model.bullets[bullet_pos].owner)
+		#	x,y,z=self.position
+		#	bx,by,bz=bullet_pos
+		#	if (y+0.5)>by and (y-1.5)<by:
+		#		#print('y::',(y+0.5),'>',by,'||',(y-1.5),'<',by)
+		#		if (x+0.5)>bx and (x-0.5)<bx:
+		#			#print('x::',(x+0.5),'>',bx,'||',(x-0.5),'<',bx)
+		#			#print('z::',(z+0.5),'>',bz,'||',(z-0.5),'<',bz)
+		#			if (z+0.5)>bz and (z-0.5)<bz:
+		#				#print('z::',(z+0.5),'>',bz,'||',(z-0.5),'<',bz)
+		#				self.player_hit(self.model.bullets[bullet_pos])
+		#				return True
+		#			
 		return False
 			
 
@@ -1192,8 +1272,12 @@ class Window(pyglet.window.Window):
 					x,y,z=self.position
 					tup=(x,y,z)
 					dx, dy, dz=vector
-					self.bang=str(tup)+':'+str((dx, dy, dz))+':'+str(self.local_player)+':'+str(self.model.players[self.local_player].damage)
-				
+					#self.model.hit_test(self, position, vector, max_distance=8)\
+					hit_return=self.model.hit_test(self.position,vector)
+					self.bang=[hit_return[0],self.model.players[self.local_player].damage]
+					#print (self.bang)
+					
+					
 				#else if edit_mode is on
 				elif self.edit_mode==1:
 					vector = self.get_sight_vector()
@@ -1244,24 +1328,25 @@ class Window(pyglet.window.Window):
 		modifiers : int
 			Number representing any modifying keys that were pressed.
 		"""
-		if symbol == key.W:
-			self.strafe[0] -= 1
-		elif symbol == key.S:
-			self.strafe[0] += 1
-		elif symbol == key.A:
-			self.strafe[1] -= 1
-		elif symbol == key.D:
-			self.strafe[1] += 1
-		elif symbol == key.SPACE:
-			if self.dy == 0:
-				self.dy = JUMP_SPEED
-		elif symbol == key.ESCAPE:
-			self.set_exclusive_mouse(False)
-		elif symbol == key.TAB:
-			self.flying = not self.flying
-		elif symbol in self.num_keys:
-			index = (symbol - self.num_keys[0]) % len(self.inventory)
-			self.block = self.inventory[index]
+		if self.hp>0:
+			if symbol == key.W:
+				self.strafe[0] -= 1
+			elif symbol == key.S:
+				self.strafe[0] += 1
+			elif symbol == key.A:
+				self.strafe[1] -= 1
+			elif symbol == key.D:
+				self.strafe[1] += 1
+			elif symbol == key.SPACE:
+				if self.dy == 0:
+					self.dy = JUMP_SPEED
+			elif symbol == key.ESCAPE:
+				self.set_exclusive_mouse(False)
+			elif symbol == key.TAB:
+				self.flying = not self.flying
+			elif symbol in self.num_keys:
+				index = (symbol - self.num_keys[0]) % len(self.inventory)
+				self.block = self.inventory[index]
 
 	def on_key_release(self, symbol, modifiers):
 		""" Called when the player releases a key. See pyglet docs for key
@@ -1415,6 +1500,10 @@ class Window(pyglet.window.Window):
 			x,y,z=self.bang_pos[w]
 			glTranslatef(x,y,z)
 			self.model.players[player.num].bang_batch.draw()
+			#self.bullet_hit(player.position)
+			#hit_test(self, position, vector, max_distance=8)
+			#block=self.hit_test(self.position,self.get_sight_vector(self.position))[0]
+			
 			
 	
 		
@@ -1524,7 +1613,8 @@ class Window(pyglet.window.Window):
 		glColor3d(1, 1, 1)
 		self.model.batch.draw()
 		
-		for person in game.players:
+		for num in game.players:
+			person=game.players[num]
 			self.set_3d()
 			self.unpack(person)
 			
@@ -1545,20 +1635,73 @@ class Window(pyglet.window.Window):
 					
 			except:
 				pass
-				
-		for bullet_pos in self.model.bullets:
-			if self.bullet_hit(bullet_pos,BULLET_WIDTH):
-				self.no_more_bullet=str(self.model.bullets[bullet_pos].id)
-				continue
-			#self.model.bullets[bullet_pos].batch.draw()
+		
+		#for bullet_pos in self.model.bullets:
+		#	if self.bullet_hit(bullet_pos,BULLET_WIDTH):
+		#		self.no_more_bullet=str(self.model.bullets[bullet_pos].id)
+		#		continue
+		#	#self.model.bullets[bullet_pos].batch.draw()
 		
 		self.set_3d()
-		self.draw_focused_block()
+		if self.edit_mode==1:
+			self.draw_focused_block()
 		self.set_2d()
-		self.draw_label()
+		if self.edit_mode==1:
+			self.draw_label()
+		else:
+			self.draw_hud()
+			pass
 		self.draw_reticle()
+		if self.hp<1 and self.respawn==0:
+			self.die()
+		if self.respawn=='x':
+			print('self.respawn',self.respawn)
+			self.get_back_in_the_game()
+	
+	def get_back_in_the_game(self):
+		print('get_back_in_the_game()')
+		self.respawn=0
+		self.born+=1
+		player_poses=[]
+		rand=random.randint(0,len(game.spawn_points)-1)
+		goTo=game.spawn_points[rand]
+		#print('random respawn to start with:',goTo)
+		for num in game.players:
+			player=game.players[num]
+			#print(player)
+			if player.hp>0:
+				player_poses.append(player.position)
+		for pos in player_poses:
+			x,y,z=pos
+			for spawn in game.spawn_points:
+				point=spawn[0]
+				px,py,pz=point
+				if abs(abs(x)-abs(px))>5:
+					if abs(abs(z)-abs(pz))>5:
+						goTo=spawn
+		#print(goTo)
+		self.position=goTo[0]
+		self.rotation=goTo[1]
+				
+	
+	
+	def die(self):
+		#height		width   color   drop
+		#0			1		2		3
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		h,w,c,drop=self.blood_overlay
+		r,g,b,a=c
+		glColor4d(r,g,b,a)
+		glRectf(0,h+drop,w,h)
+		drop-=7
+		if h+drop<1:
+			drop=0
+			self.respawn='x'
+			print('run player',self.local_player,'respawn')
+		self.blood_overlay=(h,w,c,drop)
 		
-
+		
 	def draw_focused_block(self):
 		""" Draw black edges around the block that is currently under the
 		crosshairs.
@@ -1566,7 +1709,10 @@ class Window(pyglet.window.Window):
 		vector = self.get_sight_vector()
 		block = self.model.hit_test(self.position, vector)[0]
 		if block:
-			x, y, z = block
+			try:x, y, z = block
+			except:
+				block=game.players[block].position
+				x,y,z=block
 			vertex_data = cube_vertices(x, y, z, 0.51)
 			glColor3d(0, 0, 0)
 			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
@@ -1582,7 +1728,20 @@ class Window(pyglet.window.Window):
 			pyglet.clock.get_fps(), x, y, z, rx, ry)
 		self.label.draw()
 		self.saveButton.draw()
-
+		
+	def draw_hud(self):
+		"""draw player game info to the heads-up-display"""
+		#print('draw_hud')
+		guy=game.players[self.local_player]
+		hp_perc=guy.hp/100
+		x,y,w,h,r,g,b=self.healthbar_container
+		glColor3d(r,g,b)
+		glRectf(x,y,x+w,y+h)
+		x,y,w,h,r,g,b=self.healthbar
+		glColor3d(r,g,b)
+		glRectf(x,y,(x+w)*hp_perc,y+h)
+		self.score.text='SCORE: '+str(guy.score)
+		self.score.draw()
 
 	def draw_reticle(self):
 		""" Draw the crosshairs in the center of the screen.
@@ -1689,3 +1848,4 @@ def check_network(running,ip_variable,port_variable):
 		main(GAME_START,resetNetwork)
 
 check_network(running,ip_variable,port_variable)
+	
