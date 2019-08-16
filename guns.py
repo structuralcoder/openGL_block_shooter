@@ -43,6 +43,7 @@ class pistol:
 	def __init__(self):
 		self.auto=False
 		self.damage=30
+		self.distance=20
 		#color then vertices
 		self.blocks=[SILVER,custom_vertices(0,0.13,-.30,.05,.05,.18),
 			SILVER,custom_vertices(0,0.05,-.15,.04,.1,.02)
