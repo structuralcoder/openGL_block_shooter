@@ -37,6 +37,8 @@ class Player:
 		#----
 		self.hp=100
 		self.trigger=False
+		self.score=0
+		self.born=0
 		
 		#--BUILD PLAYER:
 		self.head_size=0.2
@@ -110,13 +112,23 @@ class Game:
 		#self.moves = [None, None]
 		self.wins = [0,0]
 		#self.ties = 0
-		self.players=[]
+		self.players={}
 		self.bullets=[]
+		
+		self.spawn_points=startArray
+		self.spawn_points.append([(-17,0,-20),(90,0)])
+		self.spawn_points.append([(-7,0,-2),(-90,0)])
+		self.spawn_points.append([(11,0,-4),(0,0)])
+		self.spawn_points.append([(15,0,-14),(-90,0)])
+		self.spawn_points.append([(8,0,-34),(0,0)])
+		self.spawn_points.append([(-11,0,-36),(90,0)])
 		
 		self.add_player(id)
 		
-	def add_player(self,num):	
-		self.players.append(Player(num))
+		
+	def add_player(self,num):
+		self.players[num]=Player(num)
+		#print(self.players[num])
 		print('player added:')
 		print(len(self.players),'players on server')
 		self.player_count+=1
@@ -175,10 +187,25 @@ class Game:
 			if data[31]!='x':
 				#print(data[31])
 				self.players[num].trigger=True
-				self.bullets.append(Bullet(data[31]))
+				if data[31].find('(')==-1:
+					int_it=data[31].replace('[','').replace(']','')
+					int_it=int_it.split(',')
+					try: 
+						n=int(int_it[0]);#print(n)
+						dam=int(int_it[1]);#print(dam)
+						print('player',n,'hp is @',self.players[n].hp)
+						print('player',n,'takes',dam,'points of damage')
+						self.players[n].hp-=dam
+						print('player',n,'hp is @',self.players[n].hp)
+					except:
+						print('couldnt pass damage!!')
+					#self.bullets.append(Bullet(data[31]))
 			else:
 				self.players[num].trigger=False
-			self.players[num].hp=int(data[33])
+			#self.players[num].hp=int(data[33])
+			if int(data[33])>self.players[num].born:
+				self.players[num].born+=1
+				self.players[num].hp=100
 				
 			
 		except: print('couldnt change player',num,'data: len of data:',len(data),'/34')
