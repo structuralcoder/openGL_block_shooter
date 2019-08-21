@@ -74,6 +74,8 @@ class Player:
 		self.l_stepAngle=0
 		self.r_leg_offset=(.125, -1, 0)
 		self.r_stepAngle=0	
+		#
+		self.animate_hit=False
 		
 		
 		
@@ -183,6 +185,7 @@ class Game:
 			self.players[num].l_stepAngle=data[28]
 			self.players[num].r_leg_offset=data[29]
 			self.players[num].r_stepAngle=data[30]
+			self.players[num].animate_hit=data[34]
 			#check if fire
 			if data[31]!='x':
 				#print(data[31])
@@ -196,6 +199,11 @@ class Game:
 						print('player',n,'hp is @',self.players[n].hp)
 						print('player',n,'takes',dam,'points of damage')
 						self.players[n].hp-=dam
+						self.players[n].animate_hit=True
+						
+						
+						if self.players[n].hp<1:
+							self.players[num].score+=1
 						print('player',n,'hp is @',self.players[n].hp)
 					except:
 						print('couldnt pass damage!!')
@@ -206,9 +214,10 @@ class Game:
 			if int(data[33])>self.players[num].born:
 				self.players[num].born+=1
 				self.players[num].hp=100
-				
+				self.players[num].score-=1
 			
-		except: print('couldnt change player',num,'data: len of data:',len(data),'/34')
+			
+		except: print('couldnt change player',num,'data: len of data:',len(data),'/35')
 		
 		try:
 			if data[32]!='x':
