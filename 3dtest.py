@@ -51,6 +51,12 @@ def import_weapons(item):
 	if item=='pistol':
 		returner = guns.pistol()
 		return returner
+	elif item=='assault_rifle':
+		returner=guns.assault_rifle()
+		return returner
+	elif item=='plasma_rifle':
+		returner=guns.plasma_rifle()
+		return returner
 	pass
 
 
@@ -176,16 +182,22 @@ class level:
 		self.zz=zz
 
 
-inspect_guns=True
-inspect_which='pistol'
 weapons={
 #name =   x 	y    z  auto\dam 
 #		  0     1    2   3   4
 'pistol':import_weapons('pistol'),
+'assault_rifle':import_weapons('assault_rifle'),
+'plasma_rifle':import_weapons('plasma_rifle'),
 }
 weapon_batch={}
 
 #class Player:
+class Pickup:
+	def __init__(self,pos,type):
+		self.type=type
+		self.position=pos
+		self.rotation=[0,0]
+	
 class peopleCube:
 #	def __init__(self,window, num, player):
 	def __init__(self,player):
@@ -251,16 +263,26 @@ class peopleCube:
 		self.auto=weapons[self.equip[self.out]].auto
 		self.damage=weapons[self.equip[self.out]].damage
 		self.gun_distance=weapons[self.equip[self.out]].distance
-		print(self.gun_distance)
+		#print(self.gun_distance)
 		self.bang_batch=pyglet.graphics.Batch()
 		self.gun_sound=weapons[self.equip[self.out]].sound
+		self.sound_channel=pygame.mixer.Channel(self.num)
 		self.hit_sound=pygame.mixer.Sound('sounds/got_hit.wav')
 		self.animate_hit=False
 	
 	def stop(self):
 		self.moving=0
-
-
+	def change_guns(self,out):
+		if (out+1)>len(self.equip):
+			return False
+		else:
+			#print('switched to',out)
+			self.out=out
+			self.auto=weapons[self.equip[self.out]].auto
+			self.damage=weapons[self.equip[self.out]].damage
+			self.gun_distance=weapons[self.equip[self.out]].distance
+			self.gun_sound=weapons[self.equip[self.out]].sound
+		
 class Model(object):
 
 	def __init__(self):
@@ -278,6 +300,8 @@ class Model(object):
 		self.players = []
 		self.projectiles={}
 		self.bullets={}
+		self.pickups={}
+		self.selected_Level='testlevel.txt'
 
 		# Same mapping as `world` but only contains blocks that are shown.
 		self.shown = {}
@@ -302,6 +326,9 @@ class Model(object):
 	def _initialize(self):
 		""" Initialize the world by placing all the blocks.
 		"""
+		
+		pygame.mixer.set_num_channels(8)
+		
 		n = 80  # 1/2 width and height of world
 		s = 1  # step size
 		y = 0  # initial y height
@@ -336,7 +363,7 @@ class Model(object):
 		#        s -= d  # decrement side lenth so hills taper off
 		#
 		#generate based on lvl text file
-		openlvl=open('testlevel.txt')
+		openlvl=open(self.selected_Level)
 		world_objects=[]
 		for line in openlvl:
 			line="".join(line.split())
@@ -344,13 +371,23 @@ class Model(object):
 				continue
 			elif line[0]=='#':
 				continue
+			elif line[0]=='*':
+				#pickup on map
+				line=line.replace('*','').replace('(','').replace(')','')
+				blk=line.split(':')
+				pos=blk[0].split(',')
+				pos=(int(pos[0]),int(pos[1]),int(pos[2]))
 				
-			line=line.replace('(','').replace(')','')
-			blk=line.split(':')
-			pos=blk[0].split(',')
-			color=blk[1]
-			#class level(self,type,anchor,xx=None,yy=None,zz=None)
-			world_objects.append(level(color,(pos)))
+				weapon=blk[1]
+				self.pickups[pos]=Pickup(pos,weapon)
+				
+			else:	
+				line=line.replace('(','').replace(')','')
+				blk=line.split(':')
+				pos=blk[0].split(',')
+				color=blk[1]
+				#class level(self,type,anchor,xx=None,yy=None,zz=None)
+				world_objects.append(level(color,(pos)))
 			
 		openlvl.close()
 		
@@ -390,14 +427,17 @@ class Model(object):
 		for w in weapons:
 			weapon_batch[w]=pyglet.graphics.Batch()
 			x=0
-			while x < len(weapons[w].blocks):
-				texture_data=BRICK
-				#print(texture_data)
-				pos=(0,-0.35,-2)
-				weapon_batch[w].add(24, GL_QUADS, self.group,
-					('v3f/static', weapons[w].blocks[x+1]),
-					('t2f/static', weapons[w].blocks[x]))
-				x+=2
+			try:
+				while x < len(weapons[w].blocks):
+					texture_data=BRICK
+					#print(texture_data)
+					weapon_batch[w].add(24, GL_QUADS, self.group,
+						('v3f/static', weapons[w].blocks[x+1]),
+						('t2f/static', weapons[w].blocks[x]))
+					x+=2
+			except:
+				print(w)
+				print(weapons[w].__dir__())
 			
 		
 		
@@ -424,35 +464,52 @@ class Model(object):
 		for num in game.players:
 			if num!=self.local_player:
 				peep=game.players[num]
+				if type(peep.position)==str:
+					string=peep.position.replace('(','').replace(')','')
+					split=string.split(', ')
+					xx=float(split[0]);yy=float(split[1]);zz=float(split[2]);
+					peep.position=(xx,yy,zz)
 				people_poses[num]=peep.position
+				#print(num,'->',peep.position)
 		try:max_distance=int(self.players[self.local_player].gun_distance)
 		except:
 			print('max_distance wont convert @ hit_test')
 			print('gun_distance found:',self.players[self.local_player].gun_distance)
 		for _ in xrange(max_distance * m):
 			key = normalize((x, y, z))
-			if key!=previous:
-				#check if player is able to be hit with your bullet
-				for n in people_poses:
-					pos=people_poses[n]
-					px,py,pz=pos
+			
+			#check if player is able to be hit with your bullet
+			for n in people_poses:
+				#print('bullet progress',x,y,z)
+				#print('vector',dx,dy,dz)
+				try:
+					px,py,pz=people_poses[n]
 					if y>(py-1.5) and y<(py+.4):
-						#print('y in range for player',n)
+						#print(y,'y in range for player',n,'@',py)
 						if x>(px-.44) and x<(px+.44):
-							#print('x in range for player',n)
+							#print(x,'x in range for player',n,'@',px)
 							if z>(pz-.44) and z<(pz+.44):
-								#print('z hit player',n)
+								#print(z,'z hit player',n,'@',pz)
 								if self.iterable>=100:
 									self.iterable=0
+								
+								#print('people:',px,py,pz)
+								#print('bullet:',x,y,z)
 								#print('player',n,'hit',self.iterable)
 								self.iterable+=1
 								variable1=n
 								variable2=None
+				except:
+					print('couldnt unpack pos')
+					print(pos)
+					print(type(pos))
+						
 								
 			if key != previous and key in self.world and variable1==None:
 				return key, previous
 			previous = key
 			x, y, z = x + dx / m, y + dy / m, z + dz / m
+		#print('returning variables 1 and 2 @ end of hit_test()')
 		return variable1, variable2
 
 	def exposed(self, position):
@@ -942,17 +999,12 @@ class Window(pyglet.window.Window):
 		"""battle mode variables"""
 		self.bang='x'
 		self.barrel={}
-		self.auto_recoil=60
+		self.recoil=100
 		self.no_more_bullet='x'
 		self.hp=100
 		self.hit=False
 		self.respawn=0
 		self.born=0
-		
-		self.bang_pos={
-			'pistol':(0,.15,-.5)
-		}
-		
 		
 		
 		game = net.send('get')
@@ -1087,14 +1139,23 @@ class Window(pyglet.window.Window):
 			pass_string=pass_string+'/'+str(self.bang)												#31
 			pass_string=pass_string+'/'+str(self.no_more_bullet)									#32	
 			pass_string=pass_string+'/'+str(self.born)												#33
-			pass_string=pass_string+'/'+str(self.hit)		#34										#33
+			pass_string=pass_string+'/'+str(self.hit)												#34
+			pass_string=pass_string+'/'+str(self.model.players[self.local_player].equip)			#35
+			pass_string=pass_string+'/'+str(self.model.players[self.local_player].out)				#36
 			
 			game = net.send(pass_string)
 			self.hp=game.players[self.local_player].hp
+			"""update automatic gun bang vector
+			"""
+			
 		except:
 			print('couldnt update local_player info')
 			print('LENGTH OF self.model.players: ',len(self.model.players))
 		
+		if weapons[self.model.players[self.local_player].equip[self.model.players[self.local_player].out]].auto==True and self.bang!='x':
+				self.calc_bullet_path()
+		else:
+			self.bang='x'
 		
 		if len(game.players)<len(self.model.players):
 			players_lost=[]
@@ -1109,7 +1170,7 @@ class Window(pyglet.window.Window):
 					
 		
 		
-		self.bang='x'
+		
 		if self.no_more_bullet!='x':
 			self.no_more_bullet='x'
 		
@@ -1167,6 +1228,7 @@ class Window(pyglet.window.Window):
 		x, y, z = self.position
 		x, y, z = self.collide((x + dx, y + dy, z + dz), PLAYER_HEIGHT)
 		self.position=(x,y,z)
+		self.horde(self.position)
 		
 	def collide(self, position, height):
 		""" Checks to see if the player at the given `position` and `height`
@@ -1210,8 +1272,48 @@ class Window(pyglet.window.Window):
 						self.dy = 0
 					break
 		return tuple(p)
+		
+	def horde(self,pos):
+		#print('horde()')
+		pos=normalize(pos)
+		ux,uy,uz=pos
+		uy-=1
+		under=(ux,uy,uz)
+		
+		# if pickup is at your head
+		if pos in self.model.pickups:
+			#print('deleting pickup')
+			g=self.model.pickups[pos]
+			if g.type in self.equip:
+				print(g.type)
 			
-
+			del self.model.pickups[pos]
+			
+		# else if pickup is at your feet	
+		elif under in self.model.pickups:
+			g=self.model.pickups[under]
+			w=g.type
+			if w not in self.model.players[self.local_player].equip:
+				self.model.players[self.local_player].equip.append(w)
+			
+			#print('deleting pickup')
+			del self.model.pickups[under]
+	
+	def calc_bullet_path(self):
+		recoil_wait=weapons[self.model.players[self.local_player].equip[self.model.players[self.local_player].out]].recoil
+		if self.recoil>=recoil_wait:
+			self.recoil=0
+			vector = self.get_sight_vector()
+			x,y,z=self.position
+			#print(vector)
+			tup=(x,y,z)
+			dx, dy, dz=vector
+			#self.model.hit_test(self, position, vector, max_distance=8)\
+			hit_return=self.model.hit_test(self.position,vector)
+			
+			self.bang=[hit_return[0],self.model.players[self.local_player].damage]
+	
+	
 	def on_mouse_press(self, x, y, button, modifiers):
 		""" Called when a mouse button is pressed. See pyglet docs for button
 		amd modifier mappings.
@@ -1244,13 +1346,7 @@ class Window(pyglet.window.Window):
 			elif button == pyglet.window.mouse.LEFT:
 				#if playing a game
 				if self.bang=='x' and self.hp>0 and self.edit_mode==0:
-					x,y,z=self.position
-					tup=(x,y,z)
-					dx, dy, dz=vector
-					#self.model.hit_test(self, position, vector, max_distance=8)\
-					hit_return=self.model.hit_test(self.position,vector)
-					self.bang=[hit_return[0],self.model.players[self.local_player].damage]
-					#print (self.bang)
+					self.calc_bullet_path()
 					
 					
 				#else if edit_mode is on
@@ -1272,7 +1368,6 @@ class Window(pyglet.window.Window):
 		if button == pyglet.window.mouse.LEFT and self.bang!='x':
 			self.bang='x'
 			#print('off trigger')
-		self.auto_recoil=60
 		
 	def on_mouse_motion(self, x, y, dx, dy):
 		""" Called when the player moves the mouse.
@@ -1321,8 +1416,14 @@ class Window(pyglet.window.Window):
 				self.flying = not self.flying
 			elif symbol in self.num_keys:
 				index = (symbol - self.num_keys[0]) % len(self.inventory)
-				self.block = self.inventory[index]
-				self.placing_block=index
+				if self.edit_mode==1:
+					self.block = self.inventory[index]
+					self.placing_block=index
+				else:
+					try:
+						self.model.players[self.local_player].change_guns(index)
+					except:pass
+					
 			elif symbol in self.function_keys:
 				number_of_blocks=int(symbol)-65469
 				self.multi_block_pile=number_of_blocks
@@ -1355,10 +1456,11 @@ class Window(pyglet.window.Window):
 		if self.reticle:
 			self.reticle.delete()
 		x, y = self.width // 2, self.height // 2
-		n = 10
+		n = 20
 		self.reticle = pyglet.graphics.vertex_list(4,
 			('v2i', (x - n, y, x + n, y, x, y - n, x, y + n))
-		)
+			)#           #xy bott   xytop    xy left   xy right
+
 
 	def set_2d(self):
 		""" Configure OpenGL to draw in 2d.
@@ -1468,22 +1570,37 @@ class Window(pyglet.window.Window):
 		#elbow offset to 90
 		self.model.players[int(player.num)].r_forearm_batch.draw()
 		"""SHOW WEAPON"""
-		w=self.model.players[player.num].equip[self.model.players[player.num].out]
+		w=player.equip[player.out]
 		hand=player.forearm_height/2
 		glTranslatef(0,hand,0)
+		#glTranslatef(-.4,-1,-0.4)
 		glRotatef(-90,1,0,0)
+		#glRotatef(90,0,1,0)
 		glRotatef(player.torso_twist,0,1,0)
 		weapon_batch[w].draw()
 		if player.trigger:
-			self.model.players[player.num].gun_sound.play()
-			x,y,z=self.bang_pos[w]
+			#if sound is already playing
+			if weapons[w].auto==True:
+				"""auto sound is better when looped .play(-1)
+					but need way to turn off sound once it's played out
+					else pistol sound cuts out too early...
+				"""
+				sound=self.model.players[player.num].gun_sound
+				self.model.players[player.num].sound_channel.play(sound,-1)
+			else:
+				self.model.players[player.num].gun_sound.play()
+				#print('play gun sound')
+			#silence=Timer(.1,self.silence_gun,(player.num))
+			#silence.start()
+			x,y,z=weapons[w].bang_pos
 			glTranslatef(x,y,z)
 			self.model.players[player.num].bang_batch.draw()
 			#self.bullet_hit(player.position)
 			#hit_test(self, position, vector, max_distance=8)
 			#block=self.hit_test(self.position,self.get_sight_vector(self.position))[0]
-			
-			
+		else:
+			if weapons[w].auto==True:
+				self.model.players[player.num].sound_channel.fadeout(50)
 	
 		
 	def position_legs(self,player):
@@ -1587,6 +1704,7 @@ class Window(pyglet.window.Window):
 	def on_draw(self):
 		""" Called by pyglet to draw the canvas.
 		"""
+		self.recoil+=1
 		self.clear()
 		self.set_3d()
 		glColor3d(1, 1, 1)
@@ -1609,7 +1727,6 @@ class Window(pyglet.window.Window):
 					glRotatef(y, 1, 0, 0)
 					self.model.players[int(person.num)].head_batch.draw()
 					self.position_torso(person)
-					#self.position_arms(person)
 					self.position_legs(person)
 				if person.hp>0:
 					self.position_arms(person)
@@ -1617,10 +1734,21 @@ class Window(pyglet.window.Window):
 					if person.num==self.local_player:
 						self.hit=True
 					
-				
-					
 			except:
 				pass
+		
+		for p in self.model.pickups:
+			p=self.model.pickups[p]
+			self.set_3d()
+			xx,yy,zz=p.position
+			glTranslatef(xx,yy,zz)
+			r1,r2=p.rotation
+			glRotatef(r1,0,1,0)
+			p.rotation[0]+=1
+			w=p.type
+			
+			weapon_batch[w].draw()
+		
 		
 		self.set_3d()
 		if self.edit_mode==1:
@@ -1632,18 +1760,19 @@ class Window(pyglet.window.Window):
 			self.draw_hud()
 			pass
 		self.draw_reticle()
+		
 		if self.hp<1 and self.respawn==0:
 			self.die()
-		if self.hit==True:
+		if self.hit==True and self.hp>0:
 			self.been_hit()
 		#elif game.players[self.local_player].hit_animation==True:
 		#	self.die()
 		if self.respawn=='x':
-			print('self.respawn',self.respawn)
+			#print('self.respawn',self.respawn)
 			self.get_back_in_the_game()
 	
 	def get_back_in_the_game(self):
-		print('get_back_in_the_game()')
+		#print('get_back_in_the_game()')
 		self.respawn=0
 		self.born+=1
 		player_poses=[]
@@ -1666,6 +1795,7 @@ class Window(pyglet.window.Window):
 		#print(goTo)
 		self.position=goTo[0]
 		self.rotation=goTo[1]
+		
 	def been_hit(self):
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1689,7 +1819,7 @@ class Window(pyglet.window.Window):
 		if h+drop<1:
 			drop=0
 			self.respawn='x'
-			print('run player',self.local_player,'respawn')
+			#print('run player',self.local_player,'respawn')
 		self.blood_overlay=(h,w,c,drop)
 		
 		
@@ -1713,8 +1843,8 @@ class Window(pyglet.window.Window):
 	def draw_label(self):
 		""" Draw the label in the top left of the screen.
 		"""
-		print('draw_label()')
-		x, y, z = self.position
+		#print('draw_label()')
+		x, y, z = normalize(self.position)
 		rx, ry = self.rotation
 		self.label.text = '%02d (%.2f, %.2f, %.2f) (%d,  %d)' % (
 			pyglet.clock.get_fps(), x, y, z, rx, ry)
@@ -1741,8 +1871,20 @@ class Window(pyglet.window.Window):
 	def draw_reticle(self):
 		""" Draw the crosshairs in the center of the screen.
 		"""
-		glColor3d(0, 0, 0)
-		self.reticle.draw(GL_LINES)
+		equip=self.model.players[self.local_player].equip
+		#print(equip)
+		out=self.model.players[self.local_player].out
+		#print(out)
+		r,g,b=weapons[equip[out]].reticle_color
+		glColor3d(r,g,b)
+		if self.edit_mode==1:
+			self.reticle.draw(GL_LINES)
+		else:
+			cx=self.width//2;cy=self.height//2;
+			for r in weapons[equip[out]].reticle:
+				mx,my,mxx,myy=r
+				glRectf(cx+mx,cy+my,cx+mxx,cy+myy)
+			
 
 
 def setup_fog():
