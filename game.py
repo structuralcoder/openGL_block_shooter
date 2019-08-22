@@ -76,6 +76,8 @@ class Player:
 		self.r_stepAngle=0	
 		#
 		self.animate_hit=False
+		self.equip=[]
+		self.out=0
 		
 		
 		
@@ -194,18 +196,38 @@ class Game:
 					int_it=data[31].replace('[','').replace(']','')
 					int_it=int_it.split(',')
 					try: 
-						n=int(int_it[0]);#print(n)
-						dam=int(int_it[1]);#print(dam)
-						print('player',n,'hp is @',self.players[n].hp)
-						print('player',n,'takes',dam,'points of damage')
-						self.players[n].hp-=dam
-						self.players[n].animate_hit=True
-						
-						
-						if self.players[n].hp<1:
-							self.players[num].score+=1
-						print('player',n,'hp is @',self.players[n].hp)
+						if int_it[0]=='None':
+							pass
+						else:
+							check=0
+							n=int(int_it[0]);#print(n)
+							check=1
+							if self.players[n].hp>0:
+								check=2
+								dam=int(int_it[1]);#print(dam)
+								check+=1
+								print('player',n,'hp is @',self.players[n].hp)
+								print('player',n,'takes',dam,'points of damage')
+								self.players[n].hp-=dam
+								self.players[n].animate_hit=True
+								
+								
+								if self.players[n].hp<1:
+									self.players[num].score+=1
+								print('player',n,'hp is @',self.players[n].hp)
 					except:
+						printStr=''
+						if check>0:
+							printStr='player'+str(n)+'passed @ line 200 game.py\n'
+						if check>1:
+							printStr=printStr+'enemy player hp > 0\n'
+						if check>2:
+							printStr=printStr+'damage converted to int'
+						
+						
+						if check==0:
+							printStr='error with the player number:: '+str(data[31])
+						print(printStr)
 						print('couldnt pass damage!!')
 					#self.bullets.append(Bullet(data[31]))
 			else:
@@ -216,8 +238,13 @@ class Game:
 				self.players[num].hp=100
 				self.players[num].score-=1
 			
+			equip=data[35].replace('[','').replace(']','').replace("'",'')
+			equip=equip.split(', ')
+			self.players[num].equip=equip
+			self.players[num].out=int(data[36])
 			
-		except: print('couldnt change player',num,'data: len of data:',len(data),'/35')
+			
+		except: print('couldnt change player',num,'data: len of data:',len(data),'/37')
 		
 		try:
 			if data[32]!='x':
