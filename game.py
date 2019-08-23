@@ -80,32 +80,36 @@ class Player:
 		self.out=0
 		
 		
-		
+
+BULLET_ID=0			
 class Bullet:
 	def __init__(self,data):
 		global BULLET_ID
 		BULLET_ID+=1
 		self.id=BULLET_ID
-		info=data.split(':')
-		replace=info[0].replace('(','').replace(')','')
+		info=data.split('*')
+		self.owner=int(info[0].replace('player:',''))
+		self.gun=info[1].replace('gun:','')
+		replace=info[2].replace('position:','').replace('(','').replace(')','')
 		split=replace.split(',')
+		print('position',split)
 		self.origin=(float(split[0]),float(split[1]),float(split[2]))
+		replace=info[4].replace('rotation:','').replace('(','').replace(')','')
+		split=replace.split(',')
+		print('rotation',split)
+		self.rotation=(float(split[0]),float(split[1]))
 		#----
-		replace=info[1].replace('(','').replace(')','')
+		replace=info[3].replace('vector:','').replace('(','').replace(')','')
 		split=replace.split(',')
 		self.vector=(float(split[0]),float(split[1]),float(split[2]))
 		self.position=self.origin
-		self.batch=''
 		#----
-		self.owner=int(info[2])
-		self.damage=int(info[3])
 	
 	def go(self):
 		x,y,z=self.position
 		dx,dy,dz=self.vector
 		self.position=(x+dx,y+dy,z+dz)
 
-BULLET_ID=0	
 class Game:
 	def __init__(self, id):
 		#self.p1Went = False
@@ -247,15 +251,15 @@ class Game:
 		except: print('couldnt change player',num,'data: len of data:',len(data),'/37')
 		
 		try:
+			#new bullet
 			if data[32]!='x':
-				#print(data[32])
-				#print(type(data[32]))
-				for bullet in self.bullets:
-					if bullet.id == int(data[32]):
-						self.bullets.remove(bullet)
-						#print('bullet',bullet.id,'removed')
+				print('add bullet')
+				self.bullets.append(Bullet(data[32]))
 		except:
 			print('couldnt make [',data[32],'] work @ data[32]')
+		
+		for bullet in self.bullets:
+			bullet.go()
 		
 	def connected(self):
 		return self.ready
