@@ -45,16 +45,8 @@ def threaded_client(conn, p, gameId):
 						game.update(p, data)
 					for bullet in game.bullets:
 						x,y,z=bullet.position
-						dx,dy,dz=bullet.vector
-						dx=dx/2
-						dy=dy/2
-						dz=dz/2
-						bullet.position=(x+dx,y+dy,z+dz)
-						
-						x,y,z=bullet.position
 						if y<=-2 or y>10 or abs(x)>100 or abs(z)>100:
 							game.bullets.remove(bullet)
-							#print('bullet removed')
 					
 				
 				
