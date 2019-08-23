@@ -127,6 +127,7 @@ BRICK = tex_coords((2, 0), (2, 0), (2, 0));TEXTURES['BRICK']=BRICK
 STONE = tex_coords((2, 1), (2, 1), (2, 1));TEXTURES['STONE']=STONE
 BLACK = tex_coords((3,1), (3,1), (3,1));TEXTURES['GRASS']=GRASS
 RED = tex_coords((3,2),(3,2),(3,2));TEXTURES['RED']=RED
+BLUE = tex_coords((0,3),(0,3),(0,3));TEXTURES['BLUE']=BLUE
 WOOD_PLANKS = tex_coords((3,0), (3,0), (3,0));TEXTURES['BLACK']=BLACK
 VADER_FACE = tex_coords((0,2), (0,2), (0,2));TEXTURES['VADER_FACE']=VADER_FACE
 BULLET=tex_coords((1,2),(1,2),(1,2));TEXTURES['BULLET']=BULLET
@@ -190,6 +191,7 @@ weapons={
 'plasma_rifle':import_weapons('plasma_rifle'),
 }
 weapon_batch={}
+bullet_batch={}
 
 #class Player:
 class Pickup:
@@ -258,7 +260,7 @@ class peopleCube:
 		
 		#setup guns
 		self.trigger=False
-		self.equip=['pistol']
+		self.equip=['plasma_rifle']
 		self.out=0
 		self.auto=weapons[self.equip[self.out]].auto
 		self.damage=weapons[self.equip[self.out]].damage
@@ -426,15 +428,21 @@ class Model(object):
 		
 		for w in weapons:
 			weapon_batch[w]=pyglet.graphics.Batch()
+			bullet_batch[w]=pyglet.graphics.Batch()
 			x=0
 			try:
 				while x < len(weapons[w].blocks):
-					texture_data=BRICK
-					#print(texture_data)
 					weapon_batch[w].add(24, GL_QUADS, self.group,
 						('v3f/static', weapons[w].blocks[x+1]),
 						('t2f/static', weapons[w].blocks[x]))
 					x+=2
+				if weapons[w].bullets!=None:
+					vertices=cube_vertices(0,0,0,weapons[w].bullet_sz)
+					texture_data=weapons[w].bullets
+					#print(texture_data)
+					bullet_batch[w].add(24, GL_QUADS, self.group,
+						('v3f/static', vertices),
+						('t2f/static', texture_data))
 			except:
 				print(w)
 				print(weapons[w].__dir__())
@@ -566,23 +574,6 @@ class Model(object):
 			self.check_neighbors(position)
 		
 	
-	def add_bullet(self,bullet, immediate=True):
-		position=bullet.position
-		x,y,z=position
-		if y>-2:
-			if position not in self.bullets:
-				self.bullets[position]=bullet
-				self.bullets[position].batch=pyglet.graphics.Batch()
-				#print('bullet added')
-			texture=BULLET
-			#if position in self.projectiles:
-			#	self.remove_bullet(position, immediate)
-			self.projectiles[position] = texture
-			self.sectors.setdefault(sectorize(position), []).append(position)
-			if immediate:
-				if self.exposed(position):
-					self.show_bullet(bullet)
-				#self.check_neighbors(position)
 	
 	def remove_block(self, position, immediate=True):
 		""" Remove the block at the given `position`.
@@ -616,10 +607,6 @@ class Model(object):
 						del self._shown[position]
 				break
 
-	def remove_bullet(self, position):
-		del self.projectiles[position]
-		#print(str(position)+' deleted')
-		self.sectors[sectorize(position)].remove(position)
 			
 	def check_neighbors(self, position):
 		""" Check all blocks surrounding `position` and ensure their visual
@@ -673,14 +660,6 @@ class Model(object):
 		else:
 			self._enqueue(self._show_block, position, texture)
 	
-	def show_bullet(self,bullet, immediate=True):
-		if bullet.position in self.projectiles:
-			texture = self.projectiles[bullet.position]
-		
-		self.shown[bullet.position] = texture
-		#print(self.shown[position])
-		if immediate:
-			self._show_bullet(bullet)
 			
 	def _show_block(self, position, texture):
 		""" Private implementation of the `show_block()` method.
@@ -772,18 +751,6 @@ class Model(object):
 			('t2f/static', texture_data))
 	
 	
-	def _show_bullet(self, bullet):
-		#replace=bullet.position.replace('(','').replace(')','')
-		#split=replace.split(',')
-		#dposition=(float(split[0]),float(split[1]),float(split[2]))
-		x, y, z = bullet.position
-		vertex_data = cube_vertices(x, y, z, BULLET_WIDTH)
-		texture_data = list(BULLET)
-		#print(texture_data)
-		
-		self._shown[bullet.position] = self.bullets[bullet.position].batch.add(24, GL_QUADS, self.group,
-			('v3f/static', vertex_data),
-			('t2f/static', texture_data))
 	
 	
 	def hide_block(self, position, immediate=True):
@@ -1000,11 +967,12 @@ class Window(pyglet.window.Window):
 		self.bang='x'
 		self.barrel={}
 		self.recoil=100
-		self.no_more_bullet='x'
+		self.pass_bullet='x'
 		self.hp=100
 		self.hit=False
 		self.respawn=0
 		self.born=0
+		self.gun_pos=(0,0,0)
 		
 		
 		game = net.send('get')
@@ -1137,7 +1105,7 @@ class Window(pyglet.window.Window):
 			pass_string=pass_string+'/'+str(self.model.players[self.local_player].r_leg_offset)     #29
 			pass_string=pass_string+'/'+str(self.model.players[self.local_player].r_stepAngle)      #30
 			pass_string=pass_string+'/'+str(self.bang)												#31
-			pass_string=pass_string+'/'+str(self.no_more_bullet)									#32	
+			pass_string=pass_string+'/'+str(self.pass_bullet)										#32	
 			pass_string=pass_string+'/'+str(self.born)												#33
 			pass_string=pass_string+'/'+str(self.hit)												#34
 			pass_string=pass_string+'/'+str(self.model.players[self.local_player].equip)			#35
@@ -1156,6 +1124,7 @@ class Window(pyglet.window.Window):
 				self.calc_bullet_path()
 		else:
 			self.bang='x'
+			self.pass_bullet='x'
 		
 		if len(game.players)<len(self.model.players):
 			players_lost=[]
@@ -1171,16 +1140,6 @@ class Window(pyglet.window.Window):
 		
 		
 		
-		if self.no_more_bullet!='x':
-			self.no_more_bullet='x'
-		
-		
-		self.model.bullets={}
-		
-		try:
-			for bullet in game.bullets:
-				self.model.add_bullet(bullet)
-		except:pass
 		
 		"""move legs"""
 		if self.strafe[0]==0 and self.strafe[1]==0:
@@ -1312,7 +1271,13 @@ class Window(pyglet.window.Window):
 			hit_return=self.model.hit_test(self.position,vector)
 			
 			self.bang=[hit_return[0],self.model.players[self.local_player].damage]
-	
+			if weapons[self.model.players[self.local_player].equip[self.model.players[self.local_player].out]].bullets!=None:
+						x,y,z=self.position
+						#xx,yy,zz=self.gun_pos
+						#xx+=x;yy+=y;zz+=z-.25;self.gun_pos=(xx,yy,zz)
+						self.pass_bullet='player:'+str(self.local_player)+'*gun:'+self.model.players[self.local_player].equip[self.model.players[self.local_player].out]+'*position:'+str(self.position)+'*vector:'+str(vector)+'*rotation:'+str(self.rotation)
+					
+				
 	
 	def on_mouse_press(self, x, y, button, modifiers):
 		""" Called when a mouse button is pressed. See pyglet docs for button
@@ -1557,6 +1522,7 @@ class Window(pyglet.window.Window):
 		#bicept
 		x, y, z = player.r_bicep_offset
 		glTranslatef(x, y, z)
+		self.gun_pos=(x, y, z)
 		r1 = player.r_shoulder
 		glRotatef(-r1, 1, 0, 0)
 		self.model.players[int(player.num)].r_bicep_batch.draw()
@@ -1567,12 +1533,16 @@ class Window(pyglet.window.Window):
 		x, y, z = player.r_forearm_offset
 		z-=r2*0.00125
 		glTranslatef(x, y, z)
+		xx,yy,zz=self.gun_pos
+		xx+=x;yy+=y;zz+=z;
+		self.gun_pos=(xx,yy,zz)
 		#elbow offset to 90
 		self.model.players[int(player.num)].r_forearm_batch.draw()
 		"""SHOW WEAPON"""
 		w=player.equip[player.out]
 		hand=player.forearm_height/2
 		glTranslatef(0,hand,0)
+		xx,yy,zz=self.gun_pos;yy+=hand;self.gun_pos=(xx,yy,zz)
 		#glTranslatef(-.4,-1,-0.4)
 		glRotatef(-90,1,0,0)
 		#glRotatef(90,0,1,0)
@@ -1594,6 +1564,8 @@ class Window(pyglet.window.Window):
 			#silence.start()
 			x,y,z=weapons[w].bang_pos
 			glTranslatef(x,y,z)
+			xx,yy,zz=self.gun_pos;
+			xx+=x;yy+=y;zz+=z;self.gun_pos=(xx,yy,zz)
 			self.model.players[player.num].bang_batch.draw()
 			#self.bullet_hit(player.position)
 			#hit_test(self, position, vector, max_distance=8)
@@ -1748,6 +1720,16 @@ class Window(pyglet.window.Window):
 			w=p.type
 			
 			weapon_batch[w].draw()
+		
+		
+		for bullet in game.bullets:
+			self.set_3d()
+			x,y,z=bullet.position
+			rx,ry=bullet.rotation
+			glTranslatef(x,y,z-.2)
+			glRotatef(-rx,0,1,0)
+			glTranslatef(.5,-.02,-.02)
+			bullet_batch[bullet.gun].draw()
 		
 		
 		self.set_3d()
