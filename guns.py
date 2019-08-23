@@ -37,7 +37,7 @@ WOOD_PLANKS = tex_coords((3,0), (3,0), (3,0))
 VADER_FACE = tex_coords((0,2), (0,2), (0,2))
 BULLET=tex_coords((3,1), (3,1), (3,1))
 BLUE=tex_coords((0,3), (0,3), (0,3))
-
+BANG = tex_coords((2,2),(2,2),(2,2))
 
 """----------------------------------------------------------------------------------------"""
 class pistol:
@@ -51,6 +51,7 @@ class pistol:
 		]
 		self.sound=pygame.mixer.Sound('sounds/380_gunshot.wav')
 		self.bang_pos=(0,.15,-.5)
+		self.bang_color=BANG
 		self.reticle_color=(0,255,100)
 		self.reticle=[
 			#xy bott  xy top
@@ -58,6 +59,8 @@ class pistol:
 			,(5,-1.5,20,1.5)
 		]
 		self.recoil=0
+		self.bullets=None
+		self.bullet_sz=None
 		
 		#pyglet.graphics.vertex_list(4,('v4i', (x - n, y, x + n, y, x, y - n, x, y + n)))
 """----------------------------------------------------------------------------------------"""
@@ -77,6 +80,7 @@ class assault_rifle:
 		]
 		self.sound=pygame.mixer.Sound('sounds/rifle_sound.wav')
 		self.bang_pos=(0,.15,-.8)
+		self.bang_color=BANG
 		self.reticle_color=(255,80,0)
 		self.reticle=[
 			#xy bott  xy top
@@ -86,6 +90,8 @@ class assault_rifle:
 			,(8,-4,10,4)
 		]
 		self.recoil=10
+		self.bullets=None
+		self.bullet_sz=None
 		
 """----------------------------------------------------------------------------------------"""	
 class plasma_rifle:
@@ -102,8 +108,13 @@ class plasma_rifle:
 		]
 		self.sound=pygame.mixer.Sound('sounds/plasma_rifle_sound.wav')
 		self.bang_pos=(0,.15,-.8)
+		self.bang_color=BLUE
+		self.reticle_color=(255,80,0)
+		self.reticle=[]
 		self.recoil=80
-	
+		self.bullets=BLUE
+		self.bullet_sz=.25
+		
 		
 		
 		
